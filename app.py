@@ -8,7 +8,7 @@ from fpdf import FPDF
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Smart ATS CV Builder", page_icon="⚡", layout="wide")
 st.title("⚡ Smart ATS CV & Cover Letter Builder")
-st.markdown("Din me 100 jobs par apply karein, bina kisi headache ke! Apna data daalein, JD paste karein aur PDF download karein.")
+st.markdown("Din me 100 jobs par apply karein! Apni existing CV ka text paste karein, JD daalein aur magic dekhein.")
 
 # --- SIDEBAR: SETTINGS ---
 st.sidebar.header("⚙️ Settings")
@@ -51,39 +51,21 @@ def create_pdf(md_text):
     return bytes(pdf.output())
 
 # ==========================================
-# STEP 1: DYNAMIC USER PROFILE FORM
+# STEP 1: RAW PROFILE UPLOAD
 # ==========================================
-st.subheader("👤 Step 1: Your Profile Details")
-with st.expander("📝 Fill your information here (Click to expand)", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        u_name = st.text_input("Full Name", placeholder="e.g., Nadir Khan")
-        u_title = st.text_input("Professional Title", placeholder="e.g., Civil Engineer & Gen AI Developer")
-    with col2:
-        u_contact = st.text_input("Contact Info (Email/Phone/LinkedIn)", placeholder="nadir.khan@email.com")
-        u_skills = st.text_area("Key Skills (Comma separated)", placeholder="Python, Primavera P6, Project Management...")
-    
-    u_experience = st.text_area(
-        "Experience & Education Summary", 
-        placeholder="Briefly describe your past jobs, degrees, and major projects...", 
-        height=100
-    )
-
-# Building the dynamic profile string
-profile_dict = {
-    "name": u_name,
-    "title": u_title,
-    "contact": u_contact,
-    "skills": u_skills,
-    "experience_summary": u_experience
-}
-profile_str = json.dumps(profile_dict, indent=2)
+st.subheader("👤 Step 1: Paste Your Existing CV/Profile")
+st.markdown("Apni purani CV, LinkedIn profile, ya raw text yahan paste karein. AI khud details extract kar lega.")
+raw_profile = st.text_area(
+    "Paste your complete profile text here:", 
+    height=250, 
+    placeholder="Example:\nNadir Khan\nCivil Engineer\nExperience: 3 Years...\nEducation: NUST..."
+)
 
 # ==========================================
 # STEP 2: JOB DESCRIPTION
 # ==========================================
 st.subheader("🎯 Step 2: Target Job Description")
-job_description = st.text_area("Yahan Job Description paste karein:", height=150)
+job_description = st.text_area("Yahan Target Job Description paste karein:", height=150)
 
 generate_btn = st.button("✨ Generate Optimized Application", use_container_width=True)
 
@@ -92,8 +74,8 @@ if generate_btn:
     if not api_key:
         st.warning("⚠️ Please sidebar me apni Gemini API Key enter karein.")
         st.stop()
-    if not u_name or not u_skills or not u_experience:
-        st.warning("⚠️ Please apne Profile ki basic details Step 1 me fill karein.")
+    if not raw_profile:
+        st.warning("⚠️ Please Step 1 me apni profile ya CV ka text paste karein.")
         st.stop()
     if not job_description:
         st.warning("⚠️ Please Step 2 me Job Description paste karein.")
@@ -106,21 +88,22 @@ if generate_btn:
         st.error(f"Model setup error: {e}")
         st.stop()
 
-    with st.spinner(f"🔍 Analyzing JD & Matching Profile..."):
+    with st.spinner(f"🔍 Analyzing Profile & JD..."):
         chain_1_prompt = f"""
         Role: Expert ATS Evaluator and HR Analyst.
-        Context: Analyze the Job Description and match it with the Candidate's Profile.
+        Context: Analyze the Job Description and match it with the Candidate's Raw Profile.
         
         Job Description: {job_description}
-        Candidate Profile: {profile_str}
+        Candidate Profile: {raw_profile}
         
         Task: 
-        1. Extract core requirements.
+        1. Extract the candidate's full name from their profile text.
         2. Calculate Match Score (0-100).
         3. Output strictly in JSON format.
         
         JSON Format MUST be exactly like this:
         {{
+            "candidate_name": "Extracted Name",
             "match_score": 85,
             "eligibility": "Eligible", 
             "matched_skills": ["skill1", "skill2"],
@@ -148,12 +131,12 @@ if generate_btn:
     with st.spinner("✍️ Generating Tailored CV & Cover Letter..."):
         chain_2_prompt = f"""
         Role: Expert Resume Writer and Career Coach.
-        Profile: {profile_str}
+        Raw Profile: {raw_profile}
         Job Description: {job_description}
         Matched Skills to Highlight: {match_result.get('matched_skills')}
         
-        Task: Generate an ATS-friendly Resume AND a persuasive Cover Letter based ONLY on the Profile.
-        Constraints: Use Action Verbs. DO NOT hallucinate. Include only real facts from the profile.
+        Task: Generate an ATS-friendly Resume AND a persuasive Cover Letter based ONLY on the Candidate's Raw Profile.
+        Constraints: Use Action Verbs. DO NOT hallucinate facts.
         
         FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
         [START_RESUME]
@@ -179,12 +162,13 @@ if generate_btn:
             st.stop()
 
     # --- RENDER OUTPUT & PDF BUTTONS ---
-    safe_name = u_name.replace(" ", "_") if u_name else "Candidate"
+    extracted_name = match_result.get("candidate_name", "Candidate")
+    safe_name = extracted_name.replace(" ", "_")
     
     with tab1:
         if cv_text:
             st.markdown(cv_text)
-            st.download_button("📥 Download CV as PDF", data=create_pdf(cv_text), file_name=f"{safe_name}_CV.pdf", mime="application/pdf")
+            st.download_button("📥 Download CV as PDF", data=create_pdf(cv_text), file_name=f"{safe_name}_ATS_CV.pdf", mime="application/pdf")
             
     with tab2:
         if cl_text:
@@ -192,4 +176,4 @@ if generate_btn:
             st.download_button("📥 Download Cover Letter as PDF", data=create_pdf(cl_text), file_name=f"{safe_name}_Cover_Letter.pdf", mime="application/pdf")
 
 st.markdown("---")
-st.markdown(f"Developed with ❤️ by **Engineer Nadir Khan** (Gen AI App Developer)")
+st.markdown("Developed with ❤️ by **Engineer Nadir Khan** (Gen AI App Developer)")
