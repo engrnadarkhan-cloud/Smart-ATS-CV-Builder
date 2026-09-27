@@ -6,9 +6,9 @@ import re
 from fpdf import FPDF
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Smart ATS CV Builder (Commercial)", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Smart ATS CV Builder", page_icon="⚡", layout="wide")
 st.title("⚡ Smart ATS CV & Cover Letter Builder")
-st.markdown("Commercial ATS Engine: Automatic Profile Filtering & Professional Layout Generation.")
+st.markdown("Commercial ATS Engine: AI Profile Filtering, Match Scoring & Professional Layout Generation.")
 
 # --- SIDEBAR: SETTINGS ---
 st.sidebar.header("⚙️ Settings")
@@ -36,11 +36,10 @@ def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
             else:
                 raise e
 
-# --- PROFESSIONAL ATS PDF ENGINE (SINGLE-COLUMN HARVARD STANDARD) ---
+# --- PROFESSIONAL ATS PDF ENGINE ---
 class ATSResumePDF(FPDF):
     def header(self):
         pass
-
     def footer(self):
         self.set_y(-12)
         self.set_font("Helvetica", "I", 8)
@@ -48,7 +47,6 @@ class ATSResumePDF(FPDF):
         self.cell(0, 8, f"Page {self.page_no()}", align="C")
 
 def build_ats_pdf(raw_text):
-    # Text sanitization for Helvetica compatibility
     text = raw_text.replace("’", "'").replace("‘", "'")
     text = text.replace("“", '"').replace("”", '"')
     text = text.replace("–", "-").replace("—", "-")
@@ -60,14 +58,12 @@ def build_ats_pdf(raw_text):
     pdf.add_page()
     
     lines = text.split("\n")
-    
     for line in lines:
         clean_line = line.strip()
         if not clean_line:
             pdf.ln(2)
             continue
             
-        # Level 1: Candidate Name
         if clean_line.startswith("# "):
             pdf.set_font("Helvetica", "B", 16)
             pdf.set_text_color(20, 20, 20)
@@ -75,47 +71,38 @@ def build_ats_pdf(raw_text):
             pdf.cell(0, 7, name_text, ln=True, align="C")
             pdf.ln(1)
             
-        # Level 2: Section Headers (e.g. ## PROFESSIONAL EXPERIENCE)
         elif clean_line.startswith("## "):
             pdf.ln(3)
             pdf.set_font("Helvetica", "B", 11)
             pdf.set_text_color(30, 41, 59)
             heading_text = clean_line.replace("## ", "").strip().upper()
             pdf.cell(0, 6, heading_text, ln=True)
-            # Horizontal dividing line for ATS separation
             curr_y = pdf.get_y()
             pdf.set_draw_color(180, 180, 180)
             pdf.set_line_width(0.3)
             pdf.line(16, curr_y, 194, curr_y)
             pdf.ln(2)
             
-        # Level 3: Job Title / Institution (### or Bold)
         elif clean_line.startswith("### "):
             sub_text = clean_line.replace("### ", "").strip()
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_text_color(40, 40, 40)
             pdf.cell(0, 5, sub_text, ln=True)
             
-        # Bullet Points
         elif clean_line.startswith("- ") or clean_line.startswith("* "):
             bullet_body = clean_line[2:].strip()
-            # Clean bold markers for uniform ATS rendering
             clean_bullet = re.sub(r"\*\*(.*?)\*\*", r"\1", bullet_body)
-            
             pdf.set_font("Helvetica", size=9.5)
             pdf.set_text_color(50, 50, 50)
-            # Bullet symbol indent
             pdf.set_x(18)
             pdf.cell(4, 4.5, chr(149), ln=False)
             pdf.multi_cell(0, 4.5, clean_bullet)
             pdf.ln(0.5)
             
-        # General Body / Contact Info Line
         else:
             pdf.set_font("Helvetica", size=9.5)
             pdf.set_text_color(60, 60, 60)
             clean_body = re.sub(r"\*\*(.*?)\*\*", r"\1", clean_line)
-            # Center contact details at top
             if pdf.get_y() < 40 and ("|" in clean_body or "@" in clean_body):
                 pdf.cell(0, 5, clean_body, ln=True, align="C")
             else:
@@ -125,34 +112,25 @@ def build_ats_pdf(raw_text):
     return bytes(pdf.output())
 
 # ==========================================
-# STEP 1: RAW USER PROFILE
+# UI: USER INPUTS
 # ==========================================
 st.subheader("👤 Step 1: Candidate Master Profile")
-st.markdown("User yahan apna sara raw profile/CV paste karega. AI khud JD ke mutabiq relevant details pick karega.")
-raw_profile = st.text_area(
-    "Paste complete profile text here:", 
-    height=230, 
-    placeholder="Paste complete past experience, education, skills, certifications..."
-)
+raw_profile = st.text_area("Paste complete profile text here:", height=200)
 
-# ==========================================
-# STEP 2: TARGET JOB DESCRIPTION
-# ==========================================
 st.subheader("🎯 Step 2: Target Job Description")
 job_description = st.text_area("Paste target Job Description (JD) here:", height=150)
 
-generate_btn = st.button("✨ Generate Filtered ATS Application", use_container_width=True)
+generate_btn = st.button("✨ Evaluate & Generate ATS Application", use_container_width=True)
 
-# --- BACKEND LOGIC (2-CHAIN SYSTEM) ---
+# ==========================================
+# BACKEND LOGIC
+# ==========================================
 if generate_btn:
     if not api_key:
         st.warning("⚠️ Please sidebar me Gemini API Key enter karein.")
         st.stop()
-    if not raw_profile:
-        st.warning("⚠️ Please Step 1 me profile text paste karein.")
-        st.stop()
-    if not job_description:
-        st.warning("⚠️ Please Step 2 me Job Description paste karein.")
+    if not raw_profile or not job_description:
+        st.warning("⚠️ Please Step 1 aur Step 2 dono fill karein.")
         st.stop()
 
     genai.configure(api_key=api_key)
@@ -162,11 +140,10 @@ if generate_btn:
         st.error(f"Model initialization error: {e}")
         st.stop()
 
-    # --- CHAIN 1: EXTRACTOR & MATCHER ---
-    with st.spinner(f"🔍 Analyzing JD & Filtering Profile via {selected_model}..."):
+    # --- CHAIN 1: EXTRACTOR & EVALUATOR ---
+    with st.spinner(f"🔍 Analyzing JD & Evaluating Profile via {selected_model}..."):
         chain_1_prompt = f"""
         Role: Senior Technical Recruiter & ATS Algorithm Specialist.
-        Context: Compare the candidate's raw profile against the target job requirements.
         
         Job Description:
         {job_description}
@@ -176,18 +153,20 @@ if generate_btn:
         
         Task:
         1. Extract the exact full name of the candidate.
-        2. Identify core requirements from the JD and determine which elements of the profile strictly match.
-        3. Identify irrelevant profile data that MUST be excluded to keep the CV focused on this specific job.
-        4. Calculate realistic ATS Match Score (0-100).
+        2. Calculate a realistic ATS Match Score (0-100).
+        3. Identify 3-4 Key Strengths (why they are a good fit).
+        4. Identify 2-3 Weaknesses or Missing Skills (what they lack based on JD).
+        5. Identify elements to exclude for the tailored CV.
         
         Output MUST be strict JSON only:
         {{
             "candidate_name": "Full Name",
             "match_score": 85,
             "eligibility": "Eligible",
-            "target_keywords": ["keyword1", "keyword2"],
+            "strengths": ["Matched Primavera P6", "3 years of site supervision"],
+            "weaknesses": ["No mention of multistory buildings", "Missing advanced AutoCAD details"],
             "skills_to_include": ["skill1", "skill2"],
-            "elements_to_exclude": ["unrelated item 1", "unrelated item 2"]
+            "elements_to_exclude": ["unrelated item 1"]
         }}
         """
         try:
@@ -198,38 +177,65 @@ if generate_btn:
             st.error(f"Chain 1 Error: {e}")
             st.stop()
 
-    if match_result.get("eligibility") == "Not Eligible" and match_result.get("match_score", 0) < 50:
-        st.error(f"⚠️ Match Score: {match_result.get('match_score')}% - Yeh job profile se match nahi karti.")
+    # --- UI: ATS EVALUATION DASHBOARD ---
+    st.markdown("---")
+    st.markdown("### 📊 ATS Match Evaluation Report")
+    
+    score = match_result.get('match_score', 0)
+    
+    col1, col2, col3 = st.columns([1, 2, 2])
+    
+    with col1:
+        st.metric(label="ATS Match Score", value=f"{score}%")
+        if score >= 70:
+            st.success("High Probability of Shortlisting")
+        elif score >= 50:
+            st.warning("Moderate Fit - Needs Tailoring")
+        else:
+            st.error("Low Probability - Consider Missing Skills")
+            
+    with col2:
+        st.markdown("#### ✅ Candidate Strengths")
+        for strength in match_result.get('strengths', []):
+            st.markdown(f"- {strength}")
+            
+    with col3:
+        st.markdown("#### ⚠️ Weaknesses / Missing")
+        weaknesses = match_result.get('weaknesses', [])
+        if weaknesses:
+            for weakness in weaknesses:
+                st.markdown(f"- {weakness}")
+        else:
+            st.markdown("- None identified.")
+
+    if match_result.get("eligibility") == "Not Eligible" and score < 50:
+        st.error("⚠️ Application stopped to save tokens due to low match score.")
         st.stop()
 
-    st.success(f"✅ Tailored for Target Role! Match Score: {match_result.get('match_score')}%")
-    tab1, tab2 = st.tabs(["📄 Tailored ATS CV", "✉️ Targeted Cover Letter"])
+    st.markdown("---")
     
-    cv_text = ""
-    cl_text = ""
+    # --- CHAIN 2: TAILORED BUILDER ---
+    tab1, tab2 = st.tabs(["📄 Tailored ATS CV", "✉️ Targeted Cover Letter"])
+    cv_text, cl_text = "", ""
 
-    # --- CHAIN 2: TAILORED BUILDER (SELECTIVE INCLUSION) ---
     with st.spinner("✍️ Compiling Targeted ATS Application..."):
         chain_2_prompt = f"""
         Role: Professional Executive Resume Strategist.
-        Raw Profile Data:
-        {raw_profile}
+        Raw Profile Data: {raw_profile}
+        Target Job Description: {job_description}
+        Matched Skills to Highlight: {match_result.get('skills_to_include')}
         
-        Target Job Description:
-        {job_description}
-        
-        Mandatory Tailoring Directives:
-        1. SELECTIVE FILTERING: Include ONLY experiences, skills, duties, and certifications directly relevant to the target JD. Completely OMIT irrelevant work, minor unrelated awards, or secondary tools that dilute the application.
+        Mandatory Directives:
+        1. SELECTIVE FILTERING: Include ONLY relevant experiences/skills. Omit unrelated data.
         2. ATS STRUCTURE:
            - '# [Candidate Name]' at top
-           - Centered contact line (Email | Phone | Location | LinkedIn)
-           - '## PROFESSIONAL SUMMARY' (3-4 lines focused on target role value proposition)
-           - '## CORE COMPETENCIES & TECHNICAL SKILLS' (Categorized list of matching skills only)
-           - '## PROFESSIONAL EXPERIENCE' (Reverse chronological. Quantify site execution, quality control, BOQs, schedules, or achievements relevant to the JD. Begin bullets with strong action verbs)
-           - '## EDUCATION' (Degree, Institution, Year, Honors)
-           - '## RELEVANT CERTIFICATIONS' (Include only role-pertinent certifications)
-        3. NO HALLUCINATION: Rely strictly on real dates, facts, and figures from the raw profile.
-        4. COVER LETTER: A targeted, persuasive 3-paragraph letter connecting the candidate's exact field background to the employer's operational requirements.
+           - Centered contact line (Email | Phone | Location)
+           - '## PROFESSIONAL SUMMARY' 
+           - '## CORE COMPETENCIES'
+           - '## PROFESSIONAL EXPERIENCE'
+           - '## EDUCATION'
+           - '## RELEVANT CERTIFICATIONS'
+        3. Address the identified weaknesses IF possible by highlighting transferable skills, but DO NOT hallucinate.
 
         FORMAT OUTPUT STRICTLY AS:
         [START_RESUME]
@@ -260,24 +266,12 @@ if generate_btn:
     with tab1:
         if cv_text:
             st.markdown(cv_text)
-            cv_pdf = build_ats_pdf(cv_text)
-            st.download_button(
-                label="📥 Download ATS-Compliant CV (PDF)",
-                data=cv_pdf,
-                file_name=f"{safe_name}_ATS_CV.pdf",
-                mime="application/pdf"
-            )
+            st.download_button("📥 Download ATS-Compliant CV (PDF)", data=build_ats_pdf(cv_text), file_name=f"{safe_name}_ATS_CV.pdf", mime="application/pdf")
 
     with tab2:
         if cl_text:
             st.markdown(cl_text)
-            cl_pdf = build_ats_pdf(f"# {candidate_name}\n\n## APPLICATION COVER LETTER\n\n" + cl_text)
-            st.download_button(
-                label="📥 Download Cover Letter (PDF)",
-                data=cl_pdf,
-                file_name=f"{safe_name}_Cover_Letter.pdf",
-                mime="application/pdf"
-            )
+            st.download_button("📥 Download Cover Letter (PDF)", data=build_ats_pdf(f"# {candidate_name}\n\n## APPLICATION COVER LETTER\n\n" + cl_text), file_name=f"{safe_name}_Cover_Letter.pdf", mime="application/pdf")
 
 st.markdown("---")
 st.markdown("Developed with ❤️ by **Engineer Nadir Khan** (Gen AI App Developer)")
