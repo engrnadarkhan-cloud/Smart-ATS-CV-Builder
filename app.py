@@ -41,15 +41,22 @@ def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
                 raise e
 
 def create_pdf(md_text):
-    """Markdown text ko PDF me convert karne ka function"""
+    """Markdown text ko PDF me convert karne ka function with Unicode Fix"""
+    # Text Cleaner: Special characters ko normal characters se replace karna
+    md_text = md_text.replace("’", "'").replace("‘", "'")
+    md_text = md_text.replace("“", '"').replace("”", '"')
+    md_text = md_text.replace("–", "-").replace("—", "-")
+    md_text = md_text.replace("…", "...")
+    md_text = md_text.replace("•", "-") 
+    
     html_text = markdown.markdown(md_text)
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Helvetica", size=11)
-    # Write HTML to PDF
+    
+    # Write HTML to PDF safely
     pdf.write_html(html_text)
-    # Return as bytes for download
     return bytes(pdf.output())
 
 # --- MAIN UI: USER INPUT ---
