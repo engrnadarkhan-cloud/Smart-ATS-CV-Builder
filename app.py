@@ -56,7 +56,7 @@ if generate_btn:
     # Configure API
     genai.configure(api_key=api_key)
     # Aapne model change kiya tha, wahi rakhna behtar hai
-    model = genai.GenerativeModel('gemini-1.5-flash') 
+    model = genai.GenerativeModel('gemini-pro')
 
     with st.spinner("🔍 Job Requirements Extract kar rahe hain... (isme thora time lag sakta hai)"):
         # CHAIN 1: EXTRACTOR
