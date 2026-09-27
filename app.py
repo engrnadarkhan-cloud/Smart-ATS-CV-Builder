@@ -120,4 +120,13 @@ with st.container():
     st.info("💡 Tip: Job posting se requirements aur responsibilities copy kar ke yahan paste karein.")
     job_description = st.text_area("Paste target Job Description (JD) here:", height=150, label_visibility="collapsed")
 
-st.markdown("
+st.markdown("", unsafe_allow_html=True)
+generate_btn = st.button("✨ Evaluate & Generate ATS Application", use_container_width=True)
+==========================================
+BACKEND LOGIC WITH PROGRESSIVE UI
+==========================================
+
+if generate_btn:
+if not api_key:
+st.warning("⚠️ Please sidebar me Gemini API Key enter karein.")
+st.stop()
