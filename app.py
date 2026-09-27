@@ -6,9 +6,9 @@ import markdown
 from fpdf import FPDF
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Smart ATS CV Builder", page_icon="📄", layout="wide")
-st.title("🚀 Smart ATS CV & Cover Letter Builder")
-st.markdown("Din me 100 jobs par apply karein, bina kisi headache ke! Apna Job Description (JD) paste karein aur magic dekhein.")
+st.set_page_config(page_title="Smart ATS CV Builder (Optimized)", page_icon="⚡", layout="wide")
+st.title("⚡ Smart ATS CV & Cover Letter Builder")
+st.markdown("Optimal Engine: 2-Chain Architecture (Fast & Token Efficient)")
 
 # --- SIDEBAR: SETTINGS ---
 st.sidebar.header("⚙️ Settings")
@@ -30,6 +30,7 @@ except Exception as e:
 
 # --- HELPER FUNCTIONS ---
 def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
+    """API Caller with robust error handling"""
     for attempt in range(retries):
         try:
             response = model.generate_content(prompt)
@@ -41,31 +42,27 @@ def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
                 raise e
 
 def create_pdf(md_text):
-    """Markdown text ko PDF me convert karne ka function with Unicode Fix"""
-    # Text Cleaner: Special characters ko normal characters se replace karna
+    """Markdown ko PDF me badalne ka function (with Unicode cleaner)"""
     md_text = md_text.replace("’", "'").replace("‘", "'")
     md_text = md_text.replace("“", '"').replace("”", '"')
     md_text = md_text.replace("–", "-").replace("—", "-")
-    md_text = md_text.replace("…", "...")
-    md_text = md_text.replace("•", "-") 
+    md_text = md_text.replace("…", "...").replace("•", "-") 
     
     html_text = markdown.markdown(md_text)
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Helvetica", size=11)
-    
-    # Write HTML to PDF safely
     pdf.write_html(html_text)
     return bytes(pdf.output())
 
 # --- MAIN UI: USER INPUT ---
 st.subheader("📝 Target Job Description")
-job_description = st.text_area("Yahan LinkedIn ya kisi bhi site se Job Description paste karein:", height=200)
+job_description = st.text_area("Yahan Job Description paste karein:", height=200)
 
-generate_btn = st.button("✨ Generate ATS CV & Cover Letter")
+generate_btn = st.button("✨ Generate Optimized Application")
 
-# --- BACKEND LOGIC ---
+# --- OPTIMIZED BACKEND LOGIC (2-CHAIN SYSTEM) ---
 if generate_btn:
     if not api_key:
         st.warning("⚠️ Please sidebar me apni Gemini API Key enter karein.")
@@ -81,73 +78,98 @@ if generate_btn:
         st.error(f"Model setup error: {e}")
         st.stop()
 
-    extracted_jd = ""
-    with st.spinner(f"🔍 Extracting Job Requirements using {selected_model}..."):
-        chain_1_prompt = f"Role: HR Analyst. Context: Job Description: {job_description}\nTask: Extract required skills, experience, and responsibilities.\nOutput MUST be strict JSON: {{\"required_skills\": [], \"required_experience_years\": \"\", \"key_responsibilities\": []}}"
+    # ==========================================
+    # CHAIN 1: THE ANALYZER (Extract + Match in 1 Call)
+    # ==========================================
+    with st.spinner(f"🔍 Analyzing JD & Matching Profile (Chain 1)..."):
+        chain_1_prompt = f"""
+        Role: Expert ATS Evaluator and HR Analyst.
+        Context: Analyze the Job Description and match it with the Candidate's Master Profile.
+        
+        Job Description: {job_description}
+        Candidate Profile: {profile_str}
+        
+        Task: 
+        1. Extract core requirements.
+        2. Calculate Match Score (0-100).
+        3. Output strictly in JSON format.
+        
+        JSON Format MUST be exactly like this:
+        {{
+            "match_score": 85,
+            "eligibility": "Eligible", 
+            "matched_skills": ["skill1", "skill2"],
+            "missing_skills": ["skill3"]
+        }}
+        """
         try:
-            extracted_jd = call_gemini_with_retry(chain_1_prompt, model)
+            res1_text = call_gemini_with_retry(chain_1_prompt, model)
+            clean_res1 = res1_text.replace("```json", "").replace("```", "").strip()
+            match_result = json.loads(clean_res1)
         except Exception as e:
-            st.error(f"API Server is busy. Error: {e}")
+            st.error(f"Chain 1 Error: Server busy ya JSON format issue. Error: {e}")
             st.stop()
-            
-    if not extracted_jd:
-        st.stop()
-
-    with st.spinner("⚖️ Candidate Match Score Calculate ho raha hai..."):
-        chain_2_prompt = f"Role: ATS Evaluator. Profile: {profile_str}. JD: {extracted_jd}\nTask: Compare and output strict JSON: {{\"match_score\": 0-100, \"eligibility\": \"Eligible\" or \"Not Eligible\", \"matched_skills\": []}}\nScore > 60 means Eligible."
-        try:
-            res2_text = call_gemini_with_retry(chain_2_prompt, model)
-            clean_res2 = res2_text.replace("```json", "").replace("```", "").strip()
-            match_result = json.loads(clean_res2)
-        except Exception as e:
-            match_result = {"eligibility": "Eligible", "matched_skills": ["Primavera P6", "Streamlit", "Python", "Civil Engineering"], "match_score": 85}
 
     if match_result.get("eligibility") == "Not Eligible" and match_result.get("match_score", 0) < 50:
-        st.error(f"⚠️ Match Score: {match_result.get('match_score')}% - Yeh job aapki profile se match nahi karti.")
+        st.error(f"⚠️ Match Score: {match_result.get('match_score')}% - Yeh job aapki profile se match nahi karti. Application stopped to save tokens.")
         st.stop()
 
     # Create Tabs for Output
+    st.success(f"✅ Profile Matched! Score: {match_result.get('match_score')}%")
     tab1, tab2 = st.tabs(["📄 ATS Resume", "✉️ Cover Letter"])
-    tailored_cv = ""
+    
+    cv_text = ""
+    cl_text = ""
 
-    with tab1:
-        with st.spinner("✍️ Tailored ATS CV Generate ho rahi hai..."):
-            chain_3_prompt = f"Role: Expert Resume Writer. Profile: {profile_str}. JD: {extracted_jd}. Matched Skills: {match_result.get('matched_skills')}\nTask: Write an ATS-friendly resume in plain Markdown.\nConstraint: DO NOT hallucinate. Include only relevant experience. Start bullets with Action Verbs."
+    # ==========================================
+    # CHAIN 2: THE CREATOR (CV + Cover Letter in 1 Call)
+    # ==========================================
+    with st.spinner("✍️ Generating Tailored CV & Cover Letter (Chain 2)..."):
+        chain_2_prompt = f"""
+        Role: Expert Resume Writer and Career Coach.
+        Profile: {profile_str}
+        Job Description: {job_description}
+        Matched Skills to Highlight: {match_result.get('matched_skills')}
+        
+        Task: Generate an ATS-friendly Resume AND a persuasive Cover Letter based ONLY on the Profile.
+        Constraints: Use Action Verbs. DO NOT hallucinate. 
+        
+        FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+        [START_RESUME]
+        (Write Resume Markdown Here)
+        [END_RESUME]
+        
+        [START_COVER_LETTER]
+        (Write Cover Letter Markdown Here)
+        [END_COVER_LETTER]
+        """
+        try:
+            res2_text = call_gemini_with_retry(chain_2_prompt, model, wait_time=8)
+            
+            # Python Magic: Splitting the text into two parts based on our custom tags
             try:
-                tailored_cv = call_gemini_with_retry(chain_3_prompt, model)
-                st.success(f"✅ CV Ready! (Match Score: {match_result.get('match_score')}%)")
-                st.markdown(tailored_cv)
+                cv_text = res2_text.split("[START_RESUME]")[1].split("[END_RESUME]")[0].strip()
+                cl_text = res2_text.split("[START_COVER_LETTER]")[1].split("[END_COVER_LETTER]")[0].strip()
+            except IndexError:
+                # Fallback if AI forgets tags
+                parts = res2_text.split("Dear")
+                cv_text = parts[0].strip()
+                cl_text = "Dear" + parts[1].strip() if len(parts) > 1 else ""
                 
-                # --- PDF DOWNLOAD BUTTON FOR CV ---
-                cv_pdf_bytes = create_pdf(tailored_cv)
-                st.download_button(
-                    label="📥 Download CV as PDF",
-                    data=cv_pdf_bytes,
-                    file_name="Tailored_ATS_CV.pdf",
-                    mime="application/pdf"
-                )
-            except Exception as e:
-                st.error(f"API Error (CV): {e}")
-                    
+        except Exception as e:
+            st.error(f"Chain 2 Error: {e}")
+            st.stop()
+
+    # --- RENDER OUTPUT & PDF BUTTONS ---
+    with tab1:
+        if cv_text:
+            st.markdown(cv_text)
+            st.download_button("📥 Download CV as PDF", data=create_pdf(cv_text), file_name="Nadir_ATS_CV.pdf", mime="application/pdf")
+            
     with tab2:
-        if tailored_cv:
-            with st.spinner("✉️ Persuasive Cover Letter likha ja raha hai..."):
-                chain_4_prompt = f"Role: Career Coach. Tailored CV: {tailored_cv}. JD: {job_description}\nTask: Write a 3-paragraph persuasive cover letter in Markdown.\nConstraint: Connect their CV facts directly to employer needs."
-                try:
-                    cover_letter = call_gemini_with_retry(chain_4_prompt, model)
-                    st.success("✅ Cover Letter Ready!")
-                    st.markdown(cover_letter)
-                    
-                    # --- PDF DOWNLOAD BUTTON FOR COVER LETTER ---
-                    cl_pdf_bytes = create_pdf(cover_letter)
-                    st.download_button(
-                        label="📥 Download Cover Letter as PDF",
-                        data=cl_pdf_bytes,
-                        file_name="Cover_Letter.pdf",
-                        mime="application/pdf"
-                    )
-                except Exception as e:
-                    st.error(f"API Error (Cover Letter): {e}")
+        if cl_text:
+            st.markdown(cl_text)
+            st.download_button("📥 Download Cover Letter as PDF", data=create_pdf(cl_text), file_name="Nadir_Cover_Letter.pdf", mime="application/pdf")
 
 st.markdown("---")
 st.markdown("Developed with ❤️ by **Engineer Nadir Khan** (Gen AI App Developer)")
