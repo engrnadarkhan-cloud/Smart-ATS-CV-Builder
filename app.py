@@ -55,21 +55,29 @@ if generate_btn:
 
     # Configure API
     genai.configure(api_key=api_key)
-    # Aapne model change kiya tha, wahi rakhna behtar hai
-    model = genai.GenerativeModel('gemini-pro')
-
-    with st.spinner("🔍 Job Requirements Extract kar rahe hain... (isme thora time lag sakta hai)"):
-        # CHAIN 1: EXTRACTOR
-        chain_1_prompt = f"""
-        Role: HR Analyst. Context: Job Description: {job_description}
-        Task: Extract required skills, experience, and responsibilities.
-        Output MUST be strict JSON: {{"required_skills": [], "required_experience_years": "", "key_responsibilities": []}}
-        """
-        try:
-            extracted_jd = call_gemini_with_retry(chain_1_prompt, model)
-        except Exception as e:
-            st.error(f"API Server is busy. Asal waja: {e}")
+    
+    # --- AUTO-DETECT BEST AVAILABLE MODEL ---
+    try:
+        valid_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                valid_models.append(m.name.replace("models/", ""))
+        
+        if not valid_models:
+            st.error("⚠️ Aapki API key par koi AI model available nahi hai. Check your API key.")
             st.stop()
+            
+        # Sab se fast aur available model khud select karega
+        best_model = valid_models[0]
+        for v in valid_models:
+            if "1.5-flash" in v:
+                best_model = v
+                break
+                
+        model = genai.GenerativeModel(best_model)
+    except Exception as e:
+        st.error(f"API Authentication Error: {e}")
+        st.stop()
 
     with st.spinner("⚖️ Candidate Match Score Calculate ho raha hai..."):
         # CHAIN 2: MATCHER
