@@ -1,0 +1,68 @@
+{
+    "personal_info": {
+        "name": "Nadir Khan",
+        "title": "Civil Engineer & Gen AI App Developer",
+        "location": "Battagram, Khyber Pakhtunkhwa, Pakistan",
+        "contact": "nadir.khan@email.com"
+    },
+    "summary": "Civil Engineer with a Master's from NUST and a Gold Medal in BS. Experienced in site supervision, project management, and integrating Gen AI/Python (Streamlit) for automated construction reporting.",
+    "education": [
+        {
+            "degree": "MS in Construction Engineering and Management",
+            "institution": "NUST Islamabad",
+            "year": "2025"
+        },
+        {
+            "degree": "BS Civil Engineering",
+            "institution": "University Name",
+            "year": "2020",
+            "honors": "Gold Medalist"
+        }
+    ],
+    "experience": [
+        {
+            "job_title": "Senior Civil Engineer",
+            "company": "Attaullah Khan Trand & Brothers",
+            "start_date": "Jan 2025",
+            "end_date": "Present",
+            "responsibilities": [
+                "Overseeing major civil engineering projects and ensuring quality control.",
+                "Managing site progress and coordinating with cross-functional teams."
+            ]
+        },
+        {
+            "job_title": "Site Engineer",
+            "company": "Construction Contractor",
+            "start_date": "Dec 2020",
+            "end_date": "Aug 2022",
+            "responsibilities": [
+                "Supervised on-site construction activities and managed material procurement.",
+                "Ensured compliance with engineering drawings and safety standards."
+            ]
+        },
+        {
+            "job_title": "Primary School Teacher",
+            "company": "Education Department",
+            "start_date": "2022",
+            "end_date": "Present",
+            "responsibilities": [
+                "Teaching primary level students and managing daily classroom activities."
+            ]
+        }
+    ],
+    "projects": [
+        {
+            "name": "Site Aura",
+            "description": "Developed a Streamlit web application integrating AI to automate daily site progress reporting for construction projects."
+        },
+        {
+            "name": "Automated Bill Generation Tool",
+            "description": "Built a web tool integrating KP MRS 2022 specifications for civil engineering quantity surveying."
+        }
+    ],
+    "skills": {
+        "technical": ["AutoCAD", "Primavera P6 Professional", "Revit", "Navisworks", "3D Max", "Vensim"],
+        "programming": ["Python", "Streamlit", "Hugging Face", "Prompt Engineering"],
+        "soft_skills": ["Project Management", "System Dynamics Modeling", "Fundamental Analysis"]
+    }
+}
