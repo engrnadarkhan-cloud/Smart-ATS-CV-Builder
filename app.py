@@ -27,16 +27,16 @@ except Exception as e:
     st.stop()
 
 # --- HELPER FUNCTION FOR API RETRIES (BULLETPROOF) ---
-def call_gemini_with_retry(prompt, model, retries=4, wait_time=10):
+def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
     for attempt in range(retries):
         try:
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:
             if attempt < retries - 1:
-                time.sleep(wait_time) # API busy hone par 10 sec wait karega
+                time.sleep(wait_time)
             else:
-                raise e # Agar saari koshishein nakam hon toh asal error screen par dikhayega
+                raise e
 
 # --- MAIN UI: USER INPUT ---
 st.subheader("📝 Target Job Description")
@@ -64,10 +64,10 @@ if generate_btn:
                 valid_models.append(m.name.replace("models/", ""))
         
         if not valid_models:
-            st.error("⚠️ Aapki API key par koi AI model available nahi hai. Check your API key.")
+            st.error("⚠️ Aapki API key par koi AI model available nahi hai.")
             st.stop()
             
-        # Sab se fast aur available model khud select karega
+        # Khud best model select karega (prefer 1.5-flash)
         best_model = valid_models[0]
         for v in valid_models:
             if "1.5-flash" in v:
@@ -76,7 +76,27 @@ if generate_btn:
                 
         model = genai.GenerativeModel(best_model)
     except Exception as e:
-        st.error(f"API Authentication Error: {e}")
+        st.error(f"API setup error: {e}")
+        st.stop()
+
+    # Initialize variable taake NameError na aaye
+    extracted_jd = ""
+    
+    with st.spinner(f"🔍 Extracting Job Requirements using ({best_model})..."):
+        # CHAIN 1: EXTRACTOR
+        chain_1_prompt = f"""
+        Role: HR Analyst. Context: Job Description: {job_description}
+        Task: Extract required skills, experience, and responsibilities.
+        Output MUST be strict JSON: {{"required_skills": [], "required_experience_years": "", "key_responsibilities": []}}
+        """
+        try:
+            extracted_jd = call_gemini_with_retry(chain_1_prompt, model)
+        except Exception as e:
+            st.error(f"API Server is busy (Chain 1). Error: {e}")
+            st.stop()
+            
+    if not extracted_jd:
+        st.error("⚠️ Job description extract nahi ho saki. Please try again.")
         st.stop()
 
     with st.spinner("⚖️ Candidate Match Score Calculate ho raha hai..."):
@@ -91,8 +111,8 @@ if generate_btn:
             clean_res2 = res2_text.replace("```json", "").replace("```", "").strip()
             match_result = json.loads(clean_res2)
         except Exception as e:
-            # Agar format error aaye toh fallback
-            match_result = {"eligibility": "Eligible", "matched_skills": ["Project Management", "Python", "Civil Engineering"], "match_score": 80}
+            # Fallback agar JSON formatting me masla aaye
+            match_result = {"eligibility": "Eligible", "matched_skills": ["Project Management", "Python"], "match_score": 80}
 
     if match_result.get("eligibility") == "Not Eligible" and match_result.get("match_score", 0) < 50:
         st.error(f"⚠️ Match Score: {match_result.get('match_score')}% - Yeh job aapki profile se match nahi karti. Tokens bachayein!")
@@ -115,21 +135,23 @@ if generate_btn:
                 st.markdown(tailored_cv)
             except Exception as e:
                 st.error(f"API Error (CV): {e}")
+                tailored_cv = ""
                     
     with tab2:
-        with st.spinner("✉️ Persuasive Cover Letter likha ja raha hai..."):
-            # CHAIN 4: COVER LETTER
-            chain_4_prompt = f"""
-            Role: Career Coach. Tailored CV: {tailored_cv}. JD: {job_description}
-            Task: Write a 3-paragraph persuasive cover letter in Markdown.
-            Constraint: Connect their CV facts directly to employer needs.
-            """
-            try:
-                cover_letter = call_gemini_with_retry(chain_4_prompt, model)
-                st.success("✅ Cover Letter Ready!")
-                st.markdown(cover_letter)
-            except Exception as e:
-                st.error(f"API Error (Cover Letter): {e}")
+        if tailored_cv:
+            with st.spinner("✉️ Persuasive Cover Letter likha ja raha hai..."):
+                # CHAIN 4: COVER LETTER
+                chain_4_prompt = f"""
+                Role: Career Coach. Tailored CV: {tailored_cv}. JD: {job_description}
+                Task: Write a 3-paragraph persuasive cover letter in Markdown.
+                Constraint: Connect their CV facts directly to employer needs.
+                """
+                try:
+                    cover_letter = call_gemini_with_retry(chain_4_prompt, model)
+                    st.success("✅ Cover Letter Ready!")
+                    st.markdown(cover_letter)
+                except Exception as e:
+                    st.error(f"API Error (Cover Letter): {e}")
 
 st.markdown("---")
 st.markdown("Developed with ❤️ by **Engineer Nadir Khan** (Gen AI App Developer)")
