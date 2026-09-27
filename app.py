@@ -13,7 +13,18 @@ st.markdown("Optimal Engine: 2-Chain Architecture (Fast & Token Efficient)")
 # --- SIDEBAR: SETTINGS ---
 st.sidebar.header("⚙️ Settings")
 api_key = st.sidebar.text_input("Enter your Gemini API Key:", type="password")
-selected_model = st.sidebar.selectbox("🧠 Select AI Model:", ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-pro"])
+
+# Latest Production Models from Gemini 3 Series
+selected_model = st.sidebar.selectbox(
+    "🧠 Select AI Model:", 
+    [
+        "gemini-3.5-flash-lite",  # Default: Ultra fast & highest quota
+        "gemini-3.5-flash",       # Stable baseline
+        "gemini-3.8-flash",       # Flagship flash model
+        "gemini-3.7-flash"        # Fallback stable
+    ]
+)
+st.sidebar.caption("⚡ Tip: 'gemini-3.5-flash-lite' quota errors ko bypass karne ke liye fastest hai.")
 
 # --- LOAD MASTER PROFILE ---
 @st.cache_data
