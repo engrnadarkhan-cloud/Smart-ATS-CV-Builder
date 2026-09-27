@@ -31,7 +31,7 @@ def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
             else:
                 raise e
 
-# --- PROFESSIONAL ATS PDF ENGINE ---
+# --- PROFESSIONAL ATS PDF ENGINE (SMART PAGE BREAKS) ---
 class ATSResumePDF(FPDF):
     def header(self):
         pass
@@ -42,10 +42,12 @@ class ATSResumePDF(FPDF):
         self.cell(0, 8, f"Page {self.page_no()}", align="C")
 
 def build_ats_pdf(raw_text):
-    text = raw_text.replace("’", "'").replace("‘", "'")
+    # Extended Text Sanitization
+    text = raw_text.replace("’", "'").replace("‘", "'").replace("`", "'")
     text = text.replace("“", '"').replace("”", '"')
-    text = text.replace("–", "-").replace("—", "-")
-    text = text.replace("…", "...").replace("•", "-")
+    text = text.replace("–", "-").replace("—", "-").replace("−", "-")
+    text = text.replace("…", "...").replace("•", "-").replace("·", "-")
+    text = text.replace("\t", "    ") # Fix tab spaces
 
     pdf = ATSResumePDF(orientation="P", unit="mm", format="A4")
     pdf.set_margins(left=16, top=16, right=16)
@@ -59,6 +61,14 @@ def build_ats_pdf(raw_text):
             pdf.ln(2)
             continue
             
+        # --- SMART ORPHAN CONTROL ---
+        # Agar page ka bottom qareeb hai (Y > 255mm) aur nayi heading hai, toh naya page add karo
+        if clean_line.startswith("## ") and pdf.get_y() > 255:
+            pdf.add_page()
+        elif clean_line.startswith("### ") and pdf.get_y() > 265:
+            pdf.add_page()
+            
+        # --- RENDERING ---
         if clean_line.startswith("# "):
             pdf.set_font("Helvetica", "B", 16)
             pdf.set_text_color(20, 20, 20)
@@ -120,7 +130,6 @@ if generate_btn:
         st.warning("⚠️ Please sidebar me Gemini API Key enter karein.")
         st.stop()
         
-    # EDGE CASE 1: Garbage Input Validation
     if len(raw_profile.split()) < 20:
         st.warning("⚠️ Aapka Profile Data bohat chota hai. Behtar results ke liye kam az kam 20 alfaz ka mukammal data paste karein.")
         st.stop()
@@ -139,7 +148,6 @@ if generate_btn:
     with st.spinner(f"🔍 Analyzing JD & Evaluating Profile via {selected_model}..."):
         chain_1_prompt = f"""
         Role: Senior Technical Recruiter & ATS Algorithm Specialist.
-        
         Job Description: {job_description}
         Candidate Profile: {raw_profile}
         
@@ -202,7 +210,6 @@ if generate_btn:
         st.stop()
 
     st.markdown("---")
-    
     tab1, tab2 = st.tabs(["📄 Tailored ATS CV", "✉️ Targeted Cover Letter"])
     cv_text, cl_text = "", ""
 
@@ -214,9 +221,9 @@ if generate_btn:
         Matched Skills to Highlight: {match_result.get('skills_to_include')}
         
         Mandatory Directives (STRICT COMPLIANCE REQUIRED):
-        1. CRITICAL ANTI-HALLUCINATION POLICY: You MUST NOT invent, assume, or add any skills, roles, degrees, or metrics that are not explicitly present in the Raw Profile Data. If a JD requirement is completely missing, ignore it. Do not lie on behalf of the candidate.
+        1. CRITICAL ANTI-HALLUCINATION POLICY: You MUST NOT invent, assume, or add any skills, roles, degrees, or metrics that are not explicitly present in the Raw Profile Data.
         2. SELECTIVE FILTERING: Include ONLY relevant experiences/skills. Omit unrelated data.
-        3. FORMATTING LOCK: Use standard bullet points ('- '). Do NOT use markdown tables, HTML tags, or nested sub-bullets. Keep formatting flat and clean for ATS PDF parsing.
+        3. FORMATTING LOCK: Use standard bullet points ('- '). Do NOT use markdown tables, HTML tags, or nested sub-bullets. Keep formatting flat.
         4. ATS STRUCTURE:
            - '# [Candidate Name]' at top
            - Centered contact line (Email | Phone | Location)
