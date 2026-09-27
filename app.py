@@ -130,3 +130,167 @@ if generate_btn:
 if not api_key:
 st.warning("⚠️ Please sidebar me Gemini API Key enter karein.")
 st.stop()
+
+if len(raw_profile.split()) < 20:
+    st.warning("⚠️ Aapka Profile Data bohat chota hai. Behtar results ke liye kam az kam 20 alfaz ka mukammal data paste karein.")
+    st.stop()
+    
+if len(job_description.split()) < 15:
+    st.warning("⚠️ Job Description bohat choti hai. Mukammal JD paste karein taake AI sahi tarah evaluate kar sake.")
+    st.stop()
+
+genai.configure(api_key=api_key)
+try:
+    model = genai.GenerativeModel(selected_model)
+except Exception as e:
+    st.error(f"Model initialization error: {e}")
+    st.stop()
+
+# --- PROGRESSIVE LOADING FOR CHAIN 1 ---
+with st.status("🔍 Analyzing JD & Evaluating Profile...", expanded=True) as status:
+    st.write("⏳ Reading Job Description...")
+    time.sleep(0.5)
+    st.write("⏳ Extracting Candidate Data...")
+    
+    chain_1_prompt = f"""
+    Role: Senior Technical Recruiter & ATS Algorithm Specialist.
+    Job Description: {job_description}
+    Candidate Profile: {raw_profile}
+    
+    Task:
+    1. Extract the exact full name of the candidate.
+    2. Calculate a realistic ATS Match Score (0-100).
+    3. Identify 3-4 Key Strengths.
+    4. Identify 2-3 Weaknesses or Missing Skills.
+    5. Identify elements to exclude for the tailored CV.
+    
+    Output MUST be strict JSON only:
+    {{
+        "candidate_name": "Full Name",
+        "match_score": 85,
+        "eligibility": "Eligible",
+        "strengths": ["Matched Primavera P6", "3 years of site supervision"],
+        "weaknesses": ["No mention of multistory buildings", "Missing advanced AutoCAD details"],
+        "skills_to_include": ["skill1", "skill2"],
+        "elements_to_exclude": ["unrelated item 1"]
+    }}
+    """
+    try:
+        res1_text = call_gemini_with_retry(chain_1_prompt, model)
+        clean_res1 = res1_text.replace("```json", "").replace("```", "").strip()
+        match_result = json.loads(clean_res1)
+        status.update(label="✅ Analysis Complete!", state="complete", expanded=False)
+    except Exception as e:
+        status.update(label="❌ Error in Analysis", state="error", expanded=False)
+        st.error(f"Chain 1 Error: {e}")
+        st.stop()
+
+# --- UI: ATS EVALUATION DASHBOARD ---
+st.markdown("---")
+st.markdown("### 📊 ATS Match Evaluation Report")
+score = match_result.get('match_score', 0)
+col1, col2, col3 = st.columns([1, 2, 2])
+
+with col1:
+    st.metric(label="ATS Match Score", value=f"{score}%")
+    if score >= 70:
+        st.success("High Probability of Shortlisting")
+    elif score >= 50:
+        st.warning("Moderate Fit - Needs Tailoring")
+    else:
+        st.error("Low Probability - Consider Missing Skills")
+        
+with col2:
+    st.markdown("#### ✅ Candidate Strengths")
+    for strength in match_result.get('strengths', []):
+        st.markdown(f"- {strength}")
+        
+with col3:
+    st.markdown("#### ⚠️ Weaknesses / Missing")
+    weaknesses = match_result.get('weaknesses', [])
+    if weaknesses:
+        for weakness in weaknesses:
+            st.markdown(f"- {weakness}")
+    else:
+        st.markdown("- None identified.")
+
+if match_result.get("eligibility") == "Not Eligible" and score < 50:
+    st.error("⚠️ Application stopped to save tokens due to low match score.")
+    st.stop()
+
+st.markdown("---")
+
+# --- PROGRESSIVE LOADING FOR CHAIN 2 ---
+cv_text, cl_text = "", ""
+with st.status("✍️ Compiling Targeted ATS Application...", expanded=True) as status:
+    st.write("⏳ Structuring Professional Summary...")
+    time.sleep(0.5)
+    st.write("⏳ Formatting Experience & Education...")
+    
+    chain_2_prompt = f"""
+    Role: Professional Executive Resume Strategist.
+    Raw Profile Data: {raw_profile}
+    Target Job Description: {job_description}
+    Matched Skills to Highlight: {match_result.get('skills_to_include')}
+    
+    Mandatory Directives (STRICT COMPLIANCE REQUIRED):
+    1. CRITICAL ANTI-HALLUCINATION POLICY: You MUST NOT invent, assume, or add any skills, roles, degrees, or metrics that are not explicitly present in the Raw Profile Data.
+    2. SELECTIVE FILTERING: Include ONLY relevant experiences/skills. Omit unrelated data.
+    3. FORMATTING LOCK: Use standard bullet points ('- '). Do NOT use markdown tables, HTML tags, or nested sub-bullets. Keep formatting flat.
+    4. ATS STRUCTURE:
+       - '# [Candidate Name]' at top
+       - Centered contact line (Email | Phone | Location)
+       - '## PROFESSIONAL SUMMARY' 
+       - '## CORE COMPETENCIES'
+       - '## PROFESSIONAL EXPERIENCE'
+       - '## EDUCATION'
+       - '## RELEVANT CERTIFICATIONS'
+
+    FORMAT OUTPUT STRICTLY AS:
+    [START_RESUME]
+    (ATS Markdown CV)
+    [END_RESUME]
+
+    [START_COVER_LETTER]
+    (Cover Letter Markdown)
+    [END_COVER_LETTER]
+    """
+    try:
+        res2_text = call_gemini_with_retry(chain_2_prompt, model, wait_time=6)
+        try:
+            cv_text = res2_text.split("[START_RESUME]")[1].split("[END_RESUME]")[0].strip()
+            cl_text = res2_text.split("[START_COVER_LETTER]")[1].split("[END_COVER_LETTER]")[0].strip()
+            status.update(label="✅ Application Ready!", state="complete", expanded=False)
+        except IndexError:
+            parts = res2_text.split("Dear")
+            cv_text = parts[0].strip()
+            cl_text = "Dear" + parts[1].strip() if len(parts) > 1 else ""
+            status.update(label="✅ Application Ready!", state="complete", expanded=False)
+    except Exception as e:
+        status.update(label="❌ Error Compiling CV", state="error", expanded=False)
+        st.error(f"Chain 2 Error: {e}")
+        st.stop()
+
+# --- EXPORT & UI RENDERING ---
+candidate_name = match_result.get("candidate_name", "Candidate")
+safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', candidate_name)
+
+tab1, tab2 = st.tabs(["📄 Tailored ATS CV", "✉️ Targeted Cover Letter"])
+
+with tab1:
+    if cv_text:
+        st.markdown(cv_text)
+        st.success("✅ **Pro Tip:** Is PDF ka naam change kiye bina ATS portal par upload karein.")
+        st.download_button("📥 Download ATS-Compliant CV (PDF)", data=build_ats_pdf(cv_text), file_name=f"{safe_name}_ATS_CV.pdf", mime="application/pdf")
+
+with tab2:
+    if cl_text:
+        st.markdown(cl_text)
+        st.info("💡 **Pro Tip:** Is Cover Letter ko direct email body me bhi paste kiya ja sakta hai.")
+        st.download_button("📥 Download Cover Letter (PDF)", data=build_ats_pdf(f"# {candidate_name}\n\n## APPLICATION COVER LETTER\n\n" + cl_text), file_name=f"{safe_name}_Cover_Letter.pdf", mime="application/pdf")
+
+st.markdown("---")
+st.markdown("Developed with ❤️ by Engineer Nadir Khan (Gen AI App Developer)")
+
+
+*Note: Agar aap chahte hain ke hum future me apne is code ko alag alag files (jaise `ui.py`, `pdf_generator.py`) me divide karein taake code chota aur manage karne me asaan lagay, toh hum Phase 2 (Database connection) ke waqt usay modularize bhi kar lenge.*
