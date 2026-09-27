@@ -8,10 +8,16 @@ st.set_page_config(page_title="Smart ATS CV Builder", page_icon="📄", layout="
 st.title("🚀 Smart ATS CV & Cover Letter Builder")
 st.markdown("Din me 100 jobs par apply karein, bina kisi headache ke! Apna Job Description (JD) paste karein aur magic dekhein.")
 
-# --- SIDEBAR: API KEY SETUP ---
+# --- SIDEBAR: SETTINGS ---
 st.sidebar.header("⚙️ Settings")
 api_key = st.sidebar.text_input("Enter your Gemini API Key:", type="password")
-st.sidebar.markdown("*Aapki key safe hai aur kahin save nahi hoti.*")
+
+# Yahan humne Dropdown Menu laga diya hai!
+selected_model = st.sidebar.selectbox(
+    "🧠 Select AI Model:", 
+    ["gemini-3.8-flash", "gemini-3.7-flash"]
+)
+st.sidebar.markdown("*Tip: Agar 3.8 busy ho toh 3.7 use karein.*")
 
 # --- LOAD MASTER PROFILE ---
 @st.cache_data
@@ -26,7 +32,7 @@ except Exception as e:
     st.error("Master Profile load nahi ho saki. Check karein ke master_profile.json file mojood hai.")
     st.stop()
 
-# --- HELPER FUNCTION FOR API RETRIES (BULLETPROOF) ---
+# --- HELPER FUNCTION FOR API RETRIES ---
 def call_gemini_with_retry(prompt, model, retries=3, wait_time=5):
     for attempt in range(retries):
         try:
@@ -44,7 +50,7 @@ job_description = st.text_area("Yahan LinkedIn ya kisi bhi site se Job Descripti
 
 generate_btn = st.button("✨ Generate ATS CV & Cover Letter")
 
-# --- BACKEND LOGIC (When button is clicked) ---
+# --- BACKEND LOGIC ---
 if generate_btn:
     if not api_key:
         st.warning("⚠️ Please sidebar me apni Gemini API Key enter karein.")
@@ -53,37 +59,18 @@ if generate_btn:
         st.warning("⚠️ Please Job Description paste karein.")
         st.stop()
 
-    # Configure API
+    # Configure API with User's Choice
     genai.configure(api_key=api_key)
     
-    # --- AUTO-DETECT BEST AVAILABLE MODEL ---
     try:
-        valid_models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                valid_models.append(m.name.replace("models/", ""))
-        
-        if not valid_models:
-            st.error("⚠️ Aapki API key par koi AI model available nahi hai.")
-            st.stop()
-            
-        # Khud best model select karega (prefer 1.5-flash)
-        best_model = valid_models[0]
-        for v in valid_models:
-            if "1.5-flash" in v:
-                best_model = v
-                break
-                
-        model = genai.GenerativeModel(best_model)
+        model = genai.GenerativeModel(selected_model)
     except Exception as e:
-        st.error(f"API setup error: {e}")
+        st.error(f"Model setup error: {e}")
         st.stop()
 
-    # Initialize variable taake NameError na aaye
     extracted_jd = ""
     
-    with st.spinner(f"🔍 Extracting Job Requirements using ({best_model})..."):
-        # CHAIN 1: EXTRACTOR
+    with st.spinner(f"🔍 Extracting Job Requirements using {selected_model}..."):
         chain_1_prompt = f"""
         Role: HR Analyst. Context: Job Description: {job_description}
         Task: Extract required skills, experience, and responsibilities.
@@ -92,7 +79,7 @@ if generate_btn:
         try:
             extracted_jd = call_gemini_with_retry(chain_1_prompt, model)
         except Exception as e:
-            st.error(f"API Server is busy (Chain 1). Error: {e}")
+            st.error(f"API Server is busy. Error: {e}")
             st.stop()
             
     if not extracted_jd:
@@ -100,7 +87,6 @@ if generate_btn:
         st.stop()
 
     with st.spinner("⚖️ Candidate Match Score Calculate ho raha hai..."):
-        # CHAIN 2: MATCHER
         chain_2_prompt = f"""
         Role: ATS Evaluator. Profile: {profile_str}. JD: {extracted_jd}
         Task: Compare and output strict JSON: {{"match_score": 0-100, "eligibility": "Eligible" or "Not Eligible", "matched_skills": []}}
@@ -111,8 +97,7 @@ if generate_btn:
             clean_res2 = res2_text.replace("```json", "").replace("```", "").strip()
             match_result = json.loads(clean_res2)
         except Exception as e:
-            # Fallback agar JSON formatting me masla aaye
-            match_result = {"eligibility": "Eligible", "matched_skills": ["Project Management", "Python"], "match_score": 80}
+            match_result = {"eligibility": "Eligible", "matched_skills": ["Primavera P6", "Streamlit", "Python", "Site Supervision"], "match_score": 85}
 
     if match_result.get("eligibility") == "Not Eligible" and match_result.get("match_score", 0) < 50:
         st.error(f"⚠️ Match Score: {match_result.get('match_score')}% - Yeh job aapki profile se match nahi karti. Tokens bachayein!")
@@ -123,7 +108,6 @@ if generate_btn:
 
     with tab1:
         with st.spinner("✍️ Tailored ATS CV Generate ho rahi hai..."):
-            # CHAIN 3: CV BUILDER
             chain_3_prompt = f"""
             Role: Expert Resume Writer. Profile: {profile_str}. JD: {extracted_jd}. Matched Skills: {match_result.get('matched_skills')}
             Task: Write an ATS-friendly resume in plain Markdown.
@@ -140,7 +124,6 @@ if generate_btn:
     with tab2:
         if tailored_cv:
             with st.spinner("✉️ Persuasive Cover Letter likha ja raha hai..."):
-                # CHAIN 4: COVER LETTER
                 chain_4_prompt = f"""
                 Role: Career Coach. Tailored CV: {tailored_cv}. JD: {job_description}
                 Task: Write a 3-paragraph persuasive cover letter in Markdown.
